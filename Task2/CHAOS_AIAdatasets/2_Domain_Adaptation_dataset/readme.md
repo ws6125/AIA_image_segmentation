@@ -1,1 +1,1 @@
-Put CT / MRI / testset folders here
+Put CT / MRI / testset folders here.
