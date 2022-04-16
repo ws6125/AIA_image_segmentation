@@ -14,7 +14,7 @@ torch.cuda.empty_cache()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
-train_teacher = False
+train_teacher = True
 train_student = True
 teacher_epochs = 300
 student_epochs = 300
