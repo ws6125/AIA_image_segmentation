@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 path = os.path.dirname(os.path.abspath(__file__))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-best_model = 'best_model-298.pt'
+best_model = 'best_model.pt'
 
 # hyper parameters
 batch_size = 1
