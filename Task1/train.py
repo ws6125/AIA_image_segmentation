@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import unet
 import attunet
-import utransformer
 import dataset
 
 from torch import optim
@@ -30,7 +29,6 @@ def train():
     # model
     # model = unet.UNet(n_channels = 1, n_classes = 1, use_attention = True)
     model = attunet.AttU_Net(n_channels = 1, n_classes = 1)
-    # model = utransformer.U_Transformer(in_channels = 1, classes = 1)
     model.to(device = device)
     optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay = weight_decay)
     # optimizer = optim.RMSprop(model.parameters(), lr = lr, weight_decay = weight_decay, momentum = momentum)
