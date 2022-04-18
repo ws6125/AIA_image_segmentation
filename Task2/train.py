@@ -149,7 +149,7 @@ def trainTeacher():
 
         if (epoch + 1) in checkpoints:
             torch.save(teacher_model.state_dict(), f'best_teacher_model-{best_epoch}.pt')
-            print(f'[ Save Check Point {epoch} with Best Teacher Model {best_epoch} ]')
+            print(f'[ Save Check Point {epoch + 1} with Best Teacher Model {best_epoch} ]')
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
 
@@ -256,7 +256,7 @@ def trainStudent():
 
         if (epoch + 1) in checkpoints:
             torch.save(student_model.state_dict(), f'best_model-{best_epoch}.pt')
-            print(f'[ Save Check Point {epoch} with Best Student Model {best_epoch} ]')
+            print(f'[ Save Check Point {epoch + 1} with Best Student Model {best_epoch} ]')
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
 
