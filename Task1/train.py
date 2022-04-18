@@ -140,7 +140,7 @@ def train():
 
         if (epoch + 1) in checkpoints:
             torch.save(model.state_dict(), f'best_model-{best_epoch}.pt')
-            print(f'[ Save Check Point {epoch} with Best Model {best_epoch} ]')
+            print(f'[ Save Check Point {epoch + 1} with Best Model {best_epoch} ]')
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
 
