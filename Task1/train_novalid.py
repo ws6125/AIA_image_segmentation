@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import unet
 import attunet
+import utransformer
 import dataset
 
 from torch import optim
@@ -29,8 +30,13 @@ def train():
     # model
     # model = unet.UNet(n_channels = 1, n_classes = 1, use_attention = True)
     model = attunet.AttU_Net(n_channels = 1, n_classes = 1)
+    # model = utransformer.U_Transformer(in_channels = 1, classes = 1)
     model.to(device = device)
-    optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay = weight_decay)
+
+    best_model = None
+
+    # optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay = weight_decay)
+    optimizer = optim.RAdam(model.parameters(), lr = lr, weight_decay = weight_decay)
     # optimizer = optim.RMSprop(model.parameters(), lr = lr, weight_decay = weight_decay, momentum = momentum)
     # criterion = nn.BCEWithLogitsLoss()
 
@@ -88,11 +94,12 @@ def train():
         if train_loss < best_loss:
             best_loss = train_loss
             best_epoch = epoch + 1
-            torch.save(model.state_dict(), 'best_model.pt')
+            best_model = model.state_dict()
+            torch.save(best_model, 'best_model.pt')
             print(f'[ Save Model at Epoch {best_epoch} with Loss: {best_loss} ]')
 
-        if (epoch + 1) in checkpoints:
-            torch.save(model.state_dict(), f'best_model-{best_epoch}.pt')
+        if ((epoch + 1) in checkpoints) and (None != best_model):
+            torch.save(best_model, f'best_model-{best_epoch}.pt')
             print(f'[ Save Check Point {epoch + 1} with Best Model {best_epoch} ]')
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
