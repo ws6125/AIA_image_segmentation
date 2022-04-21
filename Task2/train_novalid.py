@@ -36,7 +36,7 @@ teacher_model = attunet.AttU_Net(n_channels = 1, n_classes = 1)
 teacher_model.to(device = device)
 
 if not train_teacher:
-    teacher_model.load_state_dict(torch.load('best_teacher_model', map_location = device))
+    teacher_model.load_state_dict(torch.load('best_teacher_model.pt', map_location = device))
 
 # student_model = unet.UNet(n_channels = 1, n_classes = 1)
 student_model = attunet.AttU_Net(n_channels = 1, n_classes = 1)
