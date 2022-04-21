@@ -5,6 +5,7 @@ import unet
 import attunet
 import dataset
 
+from collections import OrderedDict
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -14,11 +15,13 @@ torch.cuda.empty_cache()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # hyper parameters
-train_teacher = True
+train_teacher = False
 train_student = True
 teacher_epochs = 300
-student_epochs = 300
-batch_size = 8
+student_epochs = 80
+train_batch_size = 8
+valid_batch_size = 4
+ema_alpha = 0.9
 lr = 0.0003
 weight_decay = 1e-5
 threshold = 0
@@ -39,6 +42,8 @@ if not train_teacher:
 student_model = attunet.AttU_Net(n_channels = 1, n_classes = 1)
 student_model.to(device = device)
 
+best_model = None
+
 def trainTeacher():
     optimizer = optim.Adam(teacher_model.parameters(), lr = lr, weight_decay = weight_decay)
     # criterion = nn.BCEWithLogitsLoss()
@@ -49,13 +54,13 @@ def trainTeacher():
     train_sampler = SubsetRandomSampler(train_indices)
     valid_sampler = SubsetRandomSampler(valid_indices)
 
-    train_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, sampler = train_sampler)
-    valid_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, sampler = valid_sampler)
+    train_loader = DataLoader(dataset = train_dataset, batch_size = train_batch_size, sampler = train_sampler)
+    valid_loader = DataLoader(dataset = train_dataset, batch_size = train_batch_size, sampler = valid_sampler)
 
     best_loss = float('inf')
     best_epoch = 0
-    total_train_batchs = math.ceil(len(train_indices) / batch_size)
-    total_valid_batchs = math.ceil(len(valid_indices) / batch_size)
+    total_train_batchs = math.ceil(len(train_indices) / train_batch_size)
+    total_valid_batchs = math.ceil(len(valid_indices) / train_batch_size)
     for epoch in range(teacher_epochs):
         teacher_model.train()
 
@@ -65,8 +70,8 @@ def trainTeacher():
             train_sampler = SubsetRandomSampler(train_indices)
             valid_sampler = SubsetRandomSampler(valid_indices)
 
-            train_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, sampler = train_sampler)
-            valid_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, sampler = valid_sampler)
+            train_loader = DataLoader(dataset = train_dataset, batch_size = train_batch_size, sampler = train_sampler)
+            valid_loader = DataLoader(dataset = train_dataset, batch_size = train_batch_size, sampler = valid_sampler)
 
         # record loss and accs
         train_loss = []
@@ -144,11 +149,12 @@ def trainTeacher():
         if valid_loss < best_loss:
             best_loss = valid_loss
             best_epoch = epoch + 1
-            torch.save(teacher_model.state_dict(), 'best_teacher_model.pt')
+            best_model = teacher_model.state_dict()
+            torch.save(best_model, 'best_teacher_model.pt')
             print(f'[ Save Teacher Model at Epoch {best_epoch} with Loss: {best_loss} ]')
 
-        if (epoch + 1) in checkpoints:
-            torch.save(teacher_model.state_dict(), f'best_teacher_model-{best_epoch}.pt')
+        if ((epoch + 1) in checkpoints) and (None != best_model):
+            torch.save(best_model, f'best_teacher_model-{best_epoch}.pt')
             print(f'[ Save Check Point {epoch + 1} with Best Teacher Model {best_epoch} ]')
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
@@ -161,13 +167,13 @@ def trainStudent():
     train_dataset = dataset.FeatureDataset()
     valid_dataset = dataset.ValidDataset()
 
-    train_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, shuffle = True)
-    valid_loader = DataLoader(dataset = valid_dataset, batch_size = batch_size, shuffle = True)
+    train_loader = DataLoader(dataset = train_dataset, batch_size = train_batch_size, shuffle = True)
+    valid_loader = DataLoader(dataset = valid_dataset, batch_size = valid_batch_size, shuffle = True)
 
     best_loss = float('inf')
     best_epoch = 0
-    total_train_batchs = math.ceil(len(train_dataset) / batch_size)
-    total_valid_batchs = math.ceil(len(valid_dataset) / batch_size)
+    total_train_batchs = math.ceil(len(train_dataset) / train_batch_size)
+    total_valid_batchs = math.ceil(len(valid_dataset) / valid_batch_size)
     for epoch in range(student_epochs):
         student_model.train()
 
@@ -223,9 +229,9 @@ def trainStudent():
 
             data = data.to(device = device, dtype = torch.float32)
 
-            with torch.no_grad():
-                pred = student_model(data)
-                labels = teacher_model(data)
+            # with torch.no_grad():
+            pred = student_model(data)
+            labels = teacher_model(data)
 
             # set mask of labels
             labels[threshold <= labels] = 1
@@ -233,6 +239,11 @@ def trainStudent():
 
             # loss = criterion(pred, labels)
             loss = sigmoid_focal_loss(pred, labels, alpha = fl_alpha, gamma = fl_gamma, reduction = fl_reduction)
+
+            optimizer.zero_grad()
+            loss.backward()
+            grad_norm = nn.utils.clip_grad_norm_(student_model.parameters(), max_norm = 10)
+            optimizer.step()
 
             # set mask of pred
             pred[threshold <= pred] = 1
@@ -251,12 +262,28 @@ def trainStudent():
         if valid_loss < best_loss:
             best_loss = valid_loss
             best_epoch = epoch + 1
-            torch.save(student_model.state_dict(), 'best_model.pt')
+            best_model = student_model.state_dict()
+            torch.save(best_model, 'best_model.pt')
             print(f'[ Save Student Model at Epoch {best_epoch} with Loss: {best_loss} ]')
 
-        if (epoch + 1) in checkpoints:
-            torch.save(student_model.state_dict(), f'best_model-{best_epoch}.pt')
+        if ((epoch + 1) in checkpoints) and (None != best_model):
+            torch.save(best_model, f'best_model-{best_epoch}.pt')
             print(f'[ Save Check Point {epoch + 1} with Best Student Model {best_epoch} ]')
+
+        # ema
+        student_model_dict = student_model.state_dict()
+
+        new_teacher_dict = OrderedDict()
+        for key, value in teacher_model.state_dict().items():
+            if key in student_model_dict.keys():
+                # alpha * teacher + (1 - alpha) * student
+                new_teacher_dict[key] = (
+                    ema_alpha * value + (1 - ema_alpha) * student_model_dict[key]
+                )
+            else:
+                raise Exception("{} is not found in student model".format(key))
+
+        teacher_model.load_state_dict(new_teacher_dict)
 
     print(f'[ Best Epoch: {best_epoch} with Loss: {best_loss} ]')
 
